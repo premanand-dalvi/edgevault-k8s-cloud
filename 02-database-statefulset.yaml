@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: edgevault
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-db
+  ports:
+  - port: 5432
+    name: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-db
+  namespace: edgevault
+spec:
+  serviceName: "postgres-headless"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-db
+  template:
+    metadata:
+      labels:
+        app: postgres-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: edgevault-secret
+              key: DB_NAME
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: edgevault-secret
+              key: DB_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: edgevault-secret
+              key: DB_PASSWORD
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: postgres-ebs-storage
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-ebs-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "ebs-gp3-sc"
+      resources:
+        requests:
+          storage: 10Gi

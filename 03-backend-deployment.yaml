@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edgevault-backend
+  namespace: edgevault
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: edgevault-backend
+  template:
+    metadata:
+      labels:
+        app: edgevault-backend
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: "kubernetes.io/hostname"
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: edgevault-backend
+      containers:
+      - name: backend
+        # ?? ?????????? ???: ????? ???? ????? ??? AWS Account ID ??? Region ????!
+        image: 872376836172.dkr.ecr.ap-south-1.amazonaws.com/edgevault-backend:v1
+        ports:
+        - containerPort: 5000
+        envFrom:
+        - configMapRef:
+            name: edgevault-config
+        env:
+        - name: DB_HOST
+          value: "postgres-db-0.postgres-headless.edgevault.svc.cluster.local"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: edgevault-secret
+              key: DB_USER
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: edgevault-secret
+              key: DB_NAME
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: edgevault-secret
+              key: DB_PASSWORD
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: edgevault
+spec:
+  type: ClusterIP
+  selector:
+    app: edgevault-backend
+  ports:
+  - port: 5000
+    targetPort: 5000
